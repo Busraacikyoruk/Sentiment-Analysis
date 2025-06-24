@@ -1,33 +1,26 @@
+import pandas as pd
+import re
 import nltk
-from nltk.corpus import movie_reviews, stopwords
-from nltk.tokenize import word_tokenize
-import string
-import random
+from nltk.corpus import stopwords
 
-nltk.download('stopwords')
 nltk.download('punkt')
+nltk.download('stopwords')
 
-# Stopwords ve noktalama işaretleri
-stop_words = set(stopwords.words("english"))
-noktalama = set(string.punctuation)
+# Veri dosyasını oku
+df = pd.read_csv("C:/Users/aciky/Desktop/Sentiment-Analysis/ham_yorumlar.csv")
 
-def temizle(kelimeler):
-    temiz = [kelime.lower() for kelime in kelimeler]
-    temiz = [kelime for kelime in temiz if kelime not in stop_words and kelime not in noktalama]
-    return temiz
+stop_words = set(stopwords.words('turkish'))
 
-# Veri listeleri [(kelimeler, duygu)]
-veri = []
-for dosya in movie_reviews.fileids():
-    kelimeler = movie_reviews.words(dosya)
-    temiz_kelimeler = temizle(kelimeler)
-    etiket = movie_reviews.categories(dosya)[0]
-    veri.append((temiz_kelimeler, etiket))
+def temizle(metin):
+    metin = str(metin).lower()
+    metin = re.sub(r'[^\w\s]', '', metin)
+    kelimeler = metin.split()
+    kelimeler = [k for k in kelimeler if k not in stop_words]
+    return " ".join(kelimeler)
 
-# Karıştır
-random.shuffle(veri)
+df['temiz_yorum'] = df['yorum'].apply(temizle)
 
-# İlk 3 örneği göster
-for i in range(3):
-    print(f"\nYorum {i+1} - Etiket: {veri[i][1]}")
-    print(" ".join(veri[i][0][:30]))
+# 🟡 BU SATIR ÇOK ÖNEMLİ:
+df[['temiz_yorum', 'etiket']].to_csv("C:/Users/aciky/Desktop/Sentiment-Analysis/temizlenmis_yorumlar.csv", index=False)
+
+print("✅ Temizlenmiş yorumlar dosyası başarıyla oluşturuldu.")
