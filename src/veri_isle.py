@@ -6,7 +6,6 @@ from nltk.corpus import stopwords
 nltk.download('punkt')
 nltk.download('stopwords')
 
-# Veri dosyasını oku
 df = pd.read_csv("C:/Users/aciky/Desktop/Sentiment-Analysis/ham_yorumlar.csv")
 
 stop_words = set(stopwords.words('turkish'))
@@ -20,7 +19,6 @@ def temizle(metin):
 
 df['temiz_yorum'] = df['yorum'].apply(temizle)
 
-# 🟡 BU SATIR ÇOK ÖNEMLİ:
 df[['temiz_yorum', 'etiket']].to_csv("C:/Users/aciky/Desktop/Sentiment-Analysis/temizlenmis_yorumlar.csv", index=False)
 
 print("✅ Temizlenmiş yorumlar dosyası başarıyla oluşturuldu.")
