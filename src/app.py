@@ -1,59 +1,66 @@
-import nltk
-import string
-from nltk.corpus import stopwords
-
-nltk.download('stopwords')
-stop_words = set(stopwords.words('english'))
-noktalama = set(string.punctuation)
-
-def yorum_temizle(metin):
-    # Küçük harfe çevir
-    metin = metin.lower()
-    # Noktalama işaretlerini çıkar
-    metin = ''.join(ch for ch in metin if ch not in noktalama)
-    # Kelimelere ayır
-    kelimeler = metin.split()
-    # Stopword’leri çıkar
-    temiz_kelimeler = [kelime for kelime in kelimeler if kelime not in stop_words]
-    return temiz_kelimeler
-
 import streamlit as st
+import pandas as pd
+import numpy as np
 import nltk
-from nltk.corpus import movie_reviews
-import random
+import pickle
+import torch
+from transformers import BertTokenizer, BertModel
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
-# Özellik çıkarımı fonksiyonu
-def kelime_sıklığına_göre_özellikler(dosya_kelime_listesi):
-    return {kelime: True for kelime in dosya_kelime_listesi}
+nltk.download('punkt')
+nltk.download('stopwords')
 
-# Model eğitimi (basit, hafif)
-@st.cache(allow_output_mutation=True)
-def model_egit():
-    nltk.download('movie_reviews')
-    veri = [(kelime_sıklığına_göre_özellikler(movie_reviews.words(dosya)),
-             movie_reviews.categories(dosya)[0])
-            for dosya in movie_reviews.fileids()]
-    random.shuffle(veri)
-    eğitim_seti = veri[:1600]
-    test_seti = veri[1600:]
-    classifier = nltk.NaiveBayesClassifier.train(eğitim_seti)
-    return classifier
+tokenizer = BertTokenizer.from_pretrained("dbmdz/bert-base-turkish-uncased")
+bert_model = BertModel.from_pretrained("dbmdz/bert-base-turkish-uncased").to("cpu")
 
-classifier = model_egit()
+with open("src/duygu_modeli.pkl", "rb") as dosya:
+    model = pickle.load(dosya)
 
-st.title("Duygu Analizi Web Uygulaması")
+def temizle(metin):
+    stop_words = set(stopwords.words("turkish"))
+    kelimeler = word_tokenize(metin.lower())
+    temiz_kelimeler = [k for k in kelimeler if k.isalpha() and k not in stop_words]
+    return " ".join(temiz_kelimeler)
 
-yorum = st.text_area("Bir film yorumu yazın:")
+st.title("🎬 Film Yorumları Üzerine Duygu Analizi")
+st.write("BERT tabanlı sınıflandırıcı ile yorumun olumlu mu olumsuz mu olduğunu tahmin edin.")
 
-if st.button("Tahmin Et"):
-    if yorum.strip() == "":
-        st.warning("Lütfen bir yorum girin!")
+yorum = st.text_area("Yorumunuzu yazın:", "")
+
+if st.button("Analiz Et"):
+    if not yorum.strip():
+        st.warning("⚠️ Lütfen boş olmayan bir yorum girin.")
+        st.stop()
     else:
-        temiz_kelime_listesi = yorum_temizle(yorum)
-        if not temiz_kelime_listesi:
-            st.warning("Yorumunuz anlamlı kelimeler içermiyor.")
-        else:
-            özellikler = kelime_sıklığına_göre_özellikler(temiz_kelime_listesi)
-            tahmin = classifier.classify(özellikler)
-            st.success(f"Bu yorumun duygusu: **{tahmin.upper()}**")
+        try:
+            temiz_yorum = temizle(yorum)
 
+            inputs = tokenizer(
+                temiz_yorum,
+                return_tensors="pt",
+                truncation=True,
+                padding=True
+            )
+            if inputs["input_ids"].nelement() == 0:
+                st.error("⚠️ Geçerli bir giriş üretilemedi. Lütfen daha anlamlı bir yorum girin.")
+                st.stop()
+            inputs = {k: v.to("cpu") for k, v in inputs.items()}
+
+            with torch.no_grad():
+                outputs = bert_model(**inputs)
+
+            if outputs.last_hidden_state is None:
+                st.error("BERT modeli boş çıktı üretti.")
+                st.stop()
+
+            vektor = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            tahmin = model.predict(vektor)[0]
+
+            if tahmin == "pos":
+                st.success("💚 Bu yorum **olumlu** olarak değerlendirildi.")
+            else:
+                st.error("❤️‍🩹 Bu yorum **olumsuz** olarak değerlendirildi.")
+
+        except Exception as e:
+            st.error(f"Bir hata oluştu: {e}")
